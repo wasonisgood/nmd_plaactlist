@@ -10,3 +10,4 @@ test_crops/
 __pycache__/
 *.pyc
 venv/
+*.py
