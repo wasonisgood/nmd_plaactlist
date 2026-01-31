@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLA Intel Dashboard | 戰情統計中心</title>
+    
+    <!-- Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    
+    <!-- Config Tailwind for Dark/Intel Theme -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#1e293b', 900: '#0f172a', 950: '#020617' },
+                        intel: { blue: '#3b82f6', red: '#ef4444', cyan: '#06b6d4', green: '#10b981' }
+                    },
+                    fontFamily: { mono: ['Menlo', 'Monaco', 'Courier New', 'monospace'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #020617; color: #e2e8f0; }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .chart-container { position: relative; height: 100%; width: 100%; }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="border-b border-slate-800 bg-slate-900/80 backdrop-blur fixed w-full z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <div class="w-3 h-3 bg-intel-red rounded-full animate-pulse shadow-[0_0_10px_#ef4444]"></div>
+                    <span class="font-bold text-lg tracking-widest text-white">PLA<span class="text-intel-blue">INTEL</span></span>
+                </div>
+                <div class="text-xs font-mono text-slate-400">
+                    STATUS: <span class="text-intel-green">MONITORING</span> | SOURCE: MND
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow pt-20 pb-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-6">
+
+        <!-- 1. KPI Cards Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Card 1 -->
+            <div class="glass-panel rounded-xl p-5">
+                <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Total Sorties (All Time)</div>
+                <div class="flex items-end justify-between">
+                    <div class="text-3xl font-bold text-white" id="kpi-total-aircraft">-</div>
+                    <div class="text-xs text-intel-blue font-mono mb-1">Total Detected</div>
+                </div>
+            </div>
+            <!-- Card 2 -->
+            <div class="glass-panel rounded-xl p-5 border-l-4 border-intel-red">
+                <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Median Line Crossings</div>
+                <div class="flex items-end justify-between">
+                    <div class="text-3xl font-bold text-white" id="kpi-total-crossing">-</div>
+                    <div class="text-xs text-intel-red font-mono mb-1">High Threat</div>
+                </div>
+            </div>
+            <!-- Card 3 -->
+            <div class="glass-panel rounded-xl p-5">
+                <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Naval Activity</div>
+                <div class="flex items-end justify-between">
+                    <div class="text-3xl font-bold text-white" id="kpi-total-vessels">-</div>
+                    <div class="text-xs text-intel-cyan font-mono mb-1">Vessels Tracked</div>
+                </div>
+            </div>
+            <!-- Card 4 -->
+            <div class="glass-panel rounded-xl p-5">
+                <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Max Daily Activity</div>
+                <div class="flex items-end justify-between">
+                    <div class="text-3xl font-bold text-white" id="kpi-max-day">-</div>
+                    <div class="text-xs text-slate-500 font-mono mb-1" id="kpi-max-date">Date</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Main Trend Chart -->
+        <div class="glass-panel rounded-xl p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-intel-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                    Activity Trend Analysis
+                </h2>
+                <div class="flex gap-2">
+                    <span class="flex items-center gap-1 text-xs text-slate-400"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Total Air</span>
+                    <span class="flex items-center gap-1 text-xs text-slate-400"><span class="w-2 h-2 rounded-full bg-red-500"></span> Crossed Line</span>
+                </div>
+            </div>
+            <div class="h-80 w-full">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 3. Secondary Analysis Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- Radar Chart: Aircraft Types -->
+            <div class="glass-panel rounded-xl p-6">
+                <h3 class="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wider border-b border-slate-700 pb-2">Force Composition</h3>
+                <div class="h-64 flex justify-center">
+                    <canvas id="compositionChart"></canvas>
+                </div>
+                <p class="text-center text-xs text-slate-500 mt-4">Based on extracted text recognition (Fighter vs Support vs UAV)</p>
+            </div>
+
+            <!-- Bar Chart: Weekly Intensity -->
+            <div class="glass-panel rounded-xl p-6">
+                <h3 class="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wider border-b border-slate-700 pb-2">Last 7 Days Intensity</h3>
+                <div class="h-64">
+                    <canvas id="weeklyChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Data Table (Compact) -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                <h3 class="font-semibold text-white">Recent Logs</h3>
+                <button onclick="window.location.reload()" class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded transition">Refresh Data</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left text-slate-400">
+                    <thead class="text-xs text-slate-300 uppercase bg-slate-800/80">
+                        <tr>
+                            <th scope="col" class="px-6 py-3">Date</th>
+                            <th scope="col" class="px-6 py-3 text-center">Total Air</th>
+                            <th scope="col" class="px-6 py-3 text-center">Crossed Line</th>
+                            <th scope="col" class="px-6 py-3 text-center">Vessels</th>
+                            <th scope="col" class="px-6 py-3">Primary Activity</th>
+                            <th scope="col" class="px-6 py-3 text-right">Source</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="divide-y divide-slate-700">
+                        <!-- Rows injected via JS -->
+                        <tr><td colspan="6" class="px-6 py-8 text-center animate-pulse">Loading intelligence data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- JavaScript Logic -->
+    <script>
+        const SUPABASE_URL = "https://abjxpbtcseagrfwcehbo.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFianhwYnRjc2VhZ3Jmd2NlaGJvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4Mzc0NzUsImV4cCI6MjA4MjQxMzQ3NX0.IMLgS1jTBS82J0BER2I_CROCJn_7DtMoPIbyRCSpC9s";
+
+        // Global Charts
+        let trendChartInstance = null;
+        let compositionChartInstance = null;
+        let weeklyChartInstance = null;
+
+        async function initDashboard() {
+            try {
+                // Fetch Data: Get Activity and JOIN Events
+                // Order by date ascending for charts
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/pla_activity?select=*,pla_flight_events(*)&order=activity_date.asc`, {
+                    headers: {
+                        "apikey": SUPABASE_KEY,
+                        "Authorization": `Bearer ${SUPABASE_KEY}`
+                    }
+                });
+
+                if (!response.ok) throw new Error("API Error");
+                const rawData = await response.json();
+                
+                // Process Data
+                processKPIs(rawData);
+                renderTrendChart(rawData);
+                renderCompositionChart(rawData);
+                renderWeeklyChart(rawData);
+                renderTable(rawData);
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('table-body').innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-red-500">System Offline: ${err.message}</td></tr>`;
+            }
+        }
+
+        // 1. KPI Logic
+        function processKPIs(data) {
+            let totalAir = 0;
+            let totalCross = 0;
+            let totalVessels = 0;
+            let maxSorties = 0;
+            let maxDate = "";
+
+            data.forEach(d => {
+                totalAir += (d.aircraft_total || 0);
+                totalCross += (d.aircraft_crossing || 0);
+                totalVessels += (d.vessels_total || 0);
+                
+                if ((d.aircraft_total || 0) > maxSorties) {
+                    maxSorties = d.aircraft_total;
+                    maxDate = d.activity_date;
+                }
+            });
+
+            // Animate Numbers (Simple text set for now)
+            document.getElementById('kpi-total-aircraft').innerText = totalAir.toLocaleString();
+            document.getElementById('kpi-total-crossing').innerText = totalCross.toLocaleString();
+            document.getElementById('kpi-total-vessels').innerText = totalVessels.toLocaleString();
+            document.getElementById('kpi-max-day').innerText = maxSorties;
+            document.getElementById('kpi-max-date').innerText = maxDate;
+        }
+
+        // 2. Trend Chart (Line)
+        function renderTrendChart(data) {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            
+            // Limit to last 30-60 entries for readability if dataset is huge, or show all.
+            // Let's show all but maybe downsample labels if too many.
+            const labels = data.map(d => d.activity_date);
+            const airData = data.map(d => d.aircraft_total);
+            const crossData = data.map(d => d.aircraft_crossing);
+            const vesselData = data.map(d => d.vessels_total);
+
+            // Chart Config
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.borderColor = '#334155';
+
+            trendChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Total Aircraft',
+                            data: airData,
+                            borderColor: '#3b82f6', // Intel Blue
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true,
+                            pointRadius: 2
+                        },
+                        {
+                            label: 'Crossed Median Line',
+                            data: crossData,
+                            borderColor: '#ef4444', // Intel Red
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.1,
+                            borderDash: [5, 5],
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Vessels',
+                            data: vesselData,
+                            borderColor: '#06b6d4', // Cyan
+                            borderWidth: 1,
+                            tension: 0.4,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleColor: '#fff', bodyColor: '#ccc', borderColor: '#334155', borderWidth: 1 }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#1e293b' } },
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }
+                    }
+                }
+            });
+        }
+
+        // 3. Composition Chart (Doughnut)
+        function renderCompositionChart(data) {
+            const ctx = document.getElementById('compositionChart').getContext('2d');
+            
+            // Aggregate from pla_flight_events
+            let counts = { "Fighter": 0, "Support": 0, "UAV": 0, "Helicopter": 0, "Bomber": 0 };
+            
+            data.forEach(row => {
+                if (row.pla_flight_events) {
+                    row.pla_flight_events.forEach(evt => {
+                        const typeStr = (evt.aircraft_type || "").toLowerCase();
+                        const count = evt.count || 0;
+                        
+                        if (typeStr.includes('fighter') || typeStr.includes('主戰')) counts["Fighter"] += count;
+                        else if (typeStr.includes('support') || typeStr.includes('輔戰')) counts["Support"] += count;
+                        else if (typeStr.includes('uav') || typeStr.includes('無人')) counts["UAV"] += count;
+                        else if (typeStr.includes('helicopter') || typeStr.includes('直升')) counts["Helicopter"] += count;
+                        else if (typeStr.includes('bomber')) counts["Bomber"] += count;
+                    });
+                }
+            });
+
+            const total = Object.values(counts).reduce((a, b) => a + b, 0);
+            if (total === 0) return; // No detailed data
+
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(counts),
+                    datasets: [{
+                        data: Object.values(counts),
+                        backgroundColor: [
+                            '#3b82f6', // Blue - Fighter
+                            '#10b981', // Green - Support
+                            '#f59e0b', // Orange - UAV
+                            '#8b5cf6', // Purple - Heli
+                            '#ef4444'  // Red - Bomber
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 12 } }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        // 4. Weekly Bar Chart
+        function renderWeeklyChart(data) {
+            const ctx = document.getElementById('weeklyChart').getContext('2d');
+            
+            // Get last 7 days of data
+            const recentData = data.slice(-7);
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: recentData.map(d => moment(d.activity_date).format('MM/DD')),
+                    datasets: [{
+                        label: 'Sorties',
+                        data: recentData.map(d => d.aircraft_total),
+                        backgroundColor: '#6366f1',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#1e293b' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        // 5. Render Table (Reverse Chronological - Recent first)
+        function renderTable(data) {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            // Clone and reverse for table view
+            const tableData = [...data].reverse().slice(0, 50); // Show last 50
+
+            tableData.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "bg-slate-800/30 hover:bg-slate-700/50 transition border-b border-slate-700";
+                
+                // Threat highlight
+                const isThreat = item.aircraft_crossing > 0;
+                const threatColor = isThreat ? "text-red-400 font-bold" : "text-slate-400";
+                
+                // Summarize events for "Primary Activity"
+                let summary = "Routine Patrol";
+                if (isThreat) summary = "Crossed Median Line";
+                else if (item.aircraft_total > 10) summary = "High Activity";
+                
+                tr.innerHTML = `
+                    <td class="px-6 py-4 font-mono text-slate-300">${item.activity_date}</td>
+                    <td class="px-6 py-4 text-center font-bold text-white">${item.aircraft_total}</td>
+                    <td class="px-6 py-4 text-center ${threatColor}">${item.aircraft_crossing}</td>
+                    <td class="px-6 py-4 text-center text-cyan-400">${item.vessels_total}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 rounded text-xs ${isThreat ? 'bg-red-900/30 text-red-300 border border-red-800' : 'bg-green-900/30 text-green-300 border border-green-800'}">
+                            ${summary}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <a href="${item.link}" target="_blank" class="text-blue-400 hover:text-blue-300">
+                            <svg class="w-4 h-4 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                        </a>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        initDashboard();
+    </script>
+</body>
+</html>
