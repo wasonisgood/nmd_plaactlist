@@ -6,6 +6,7 @@ import requests
 import urllib3
 import base64
 import concurrent.futures
+import platform
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from PIL import Image
@@ -21,8 +22,9 @@ BASE_URL = "https://www.mnd.gov.tw"
 LIST_URL_TEMPLATE = "https://www.mnd.gov.tw/news/plaactlist/{}"
 IMAGE_DIR = "images"
 
-SUPABASE_URL = "https://abjxpbtcseagrfwcehbo.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFianhwYnRjc2VhZ3Jmd2NlaGJvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4Mzc0NzUsImV4cCI6MjA4MjQxMzQ3NX0.IMLgS1jTBS82J0BER2I_CROCJn_7DtMoPIbyRCSpC9s"
+# Config: Try Environment Variables first (For GitHub Actions), else use Hardcoded
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://abjxpbtcseagrfwcehbo.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFianhwYnRjc2VhZ3Jmd2NlaGJvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4Mzc0NzUsImV4cCI6MjA4MjQxMzQ3NX0.IMLgS1jTBS82J0BER2I_CROCJn_7DtMoPIbyRCSpC9s")
 
 SUPABASE_HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -31,9 +33,11 @@ SUPABASE_HEADERS = {
     "Prefer": "return=representation"
 }
 
-# Tesseract Configuration
+# Tesseract Configuration (Cross-Platform)
 try:
     import pytesseract
+    
+    # 1. Try Windows Paths
     possible_paths = [
         r'C:\Program Files\Tesseract-OCR\tesseract.exe',
         r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
@@ -44,11 +48,27 @@ try:
         if os.path.exists(path):
             tesseract_cmd = path
             break
+            
+    # 2. Try Linux/Mac Path (GitHub Actions uses /usr/bin/tesseract)
+    if not tesseract_cmd and platform.system() != "Windows":
+        if os.path.exists("/usr/bin/tesseract"):
+            tesseract_cmd = "/usr/bin/tesseract"
+
     if tesseract_cmd:
         pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-    TESSERACT_AVAILABLE = True
+    
+    # Check if accessible
+    try:
+        pytesseract.get_tesseract_version()
+        TESSERACT_AVAILABLE = True
+        print("Tesseract OCR detected successfully.")
+    except:
+        TESSERACT_AVAILABLE = False
+        print("Tesseract binary not found or not executable.")
+
 except ImportError:
     TESSERACT_AVAILABLE = False
+    print("Warning: pytesseract not installed.")
 
 if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
@@ -115,7 +135,7 @@ def parse_ocr_lines(raw_lines):
             count_match = re.search(r'(\d+)\s*(?:架次|架|sorties|sortie)', line)
             if not count_match: count_match = re.search(r'(?:計|of)\s*(\d+)', line)
             if count_match and current_event['count'] == 0: current_event['count'] = int(count_match.group(1))
-            if '中線' in line or 'median line' in line_lower:
+            if '中線' in line or 'median line' in line_lower: 
                 if "逾越中線 (Crossed Median Line)" not in current_event['details']: current_event['details'].append("逾越中線 (Crossed Median Line)")
             if '西南' in line or 'sw' in line_lower or 'southwest' in line_lower:
                  if "進入西南空域 (Entered SW ADIZ)" not in current_event['details']: current_event['details'].append("進入西南空域 (Entered SW ADIZ)")
@@ -151,6 +171,7 @@ def process_image(url, date_str):
         img_filename = f"{date_str}{ext}"
         img_path = os.path.join(IMAGE_DIR, img_filename)
         with open(img_path, 'wb') as f: f.write(img_data)
+        
         if TESSERACT_AVAILABLE:
             try:
                 with Image.open(img_path) as img:
@@ -259,8 +280,8 @@ def insert_relational_record(record):
             for evt in events:
                 event_payloads.append({
                     "activity_id": activity_id,
-                    "activity_date": record['activity_date'], # Redundancy
-                    "link": record['link'],                   # Redundancy
+                    "activity_date": record['activity_date'], 
+                    "link": record['link'],                   
                     "time_range": evt.get('time'),
                     "aircraft_type": evt.get('aircraft_type'),
                     "count": evt.get('count', 0),
@@ -271,11 +292,12 @@ def insert_relational_record(record):
             requests.post(url_events, headers=SUPABASE_HEADERS, json=event_payloads)
             
         print(f"Successfully uploaded: {record['activity_date']}")
-    except Exception as e: print(f"Exception during upload: {e}")
+    except Exception as e:
+        print(f"Exception during upload: {e}")
 
 # --- Main ---
 def update_database():
-    print("=== Starting PLA Activity Update (Relational V2) ===")
+    print("=== Starting PLA Activity Update (GitHub Actions) ===")
     existing_dates = get_existing_dates()
     print(f"Loaded {len(existing_dates)} records from Supabase.")
 
@@ -305,8 +327,9 @@ def update_database():
                 link = item.get('href')
                 if link and not link.startswith('http'): link = BASE_URL + '/' + link.lstrip('/')
                 new_items_to_process.append({'date': ad_date, 'link': link})
-        except Exception as e: print(f"Error scanning list: {e}")
-        break
+        except Exception as e:
+            print(f"Error scanning list: {e}")
+            break
         if stop_scraping: break
         page += 1
         time.sleep(1)
@@ -318,7 +341,8 @@ def update_database():
     print(f"Found {len(new_items_to_process)} new updates. Processing...")
     
     new_records = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    # Using 2 workers to be gentle on GitHub Actions resources
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         futures = {executor.submit(process_new_item, item): item for item in new_items_to_process}
         for future in concurrent.futures.as_completed(futures):
             res = future.result()
