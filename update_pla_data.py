@@ -94,19 +94,28 @@ def get_activity_date(publish_date_str):
 
 def analyze_text_content(text):
     data = {"aircraft_total": 0, "aircraft_crossing": 0, "vessels_total": 0, "official_ships_total": 0, "balloons_total": 0}
-    match = re.search(r'共機(\d+)架次', text)
+    
+    # 偵獲共機 (Detect Communist Aircraft): Match "偵獲共機 1 架" or "1 架次"
+    match = re.search(r'共機\s*(\d+)\s*(?:架|架次)', text)
     if match: data["aircraft_total"] = int(match.group(1))
+    
+    # Check for crossing count in parentheses
     paren_match = re.search(r'\((.*?)\)', text)
     if paren_match:
         inner = paren_match.group(1)
-        crossing = re.search(r'(\d+)架次', inner)
+        crossing = re.search(r'(\d+)\s*(?:架|架次)', inner)
         if crossing: data["aircraft_crossing"] = int(crossing.group(1))
-    match = re.search(r'共艦(\d+)艘', text)
+    
+    # 共艦 (Communist Vessels)
+    match = re.search(r'共艦\s*(\d+)\s*(?:艘|艘次)', text)
     if match: data["vessels_total"] = int(match.group(1))
-    match = re.search(r'公務船(\d+)艘', text)
+    
+    # 公務船 (Official Ships)
+    match = re.search(r'公務船\s*(\d+)\s*(?:艘|艘次)', text)
     if match: data["official_ships_total"] = int(match.group(1))
     match = re.search(r'空飄氣球.*?(\d+)[顆枚]', text)
     if match: data["balloons_total"] = int(match.group(1))
+    
     return data
 
 def parse_ocr_lines(raw_lines):
