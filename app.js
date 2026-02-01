@@ -3,6 +3,8 @@ let GLOBAL_DATA = [];
 let CURRENT_CHART_DATA = [];
 let trendChartInstance = null;
 let compositionChartInstance = null;
+let officialChartInstance = null;
+let balloonsChartInstance = null;
 
 async function init() {
     try {
@@ -46,18 +48,23 @@ function updateDashboard(days) {
 
     renderKPIs(CURRENT_CHART_DATA);
     renderTrendChart(CURRENT_CHART_DATA);
+    renderOfficialShipsChart(CURRENT_CHART_DATA);
+    renderBalloonsChart(CURRENT_CHART_DATA);
     renderCompositionChart(CURRENT_CHART_DATA);
 }
 
 // --- Render Functions ---
 function renderKPIs(data) {
-    let totalAir = 0, totalCross = 0, totalShip = 0;
+    let totalAir = 0, totalCross = 0, totalShip = 0, totalOfficial = 0, totalBalloons = 0;
     let maxVal = 0, maxDate = "";
 
     data.forEach(d => {
         totalAir += (d.aircraft_total || 0);
         totalCross += (d.aircraft_crossing || 0);
         totalShip += (d.vessels_total || 0);
+        totalOfficial += (d.official_ships_total || 0);
+        totalBalloons += (d.balloons_total || 0);
+        
         if ((d.aircraft_total || 0) > maxVal) {
             maxVal = d.aircraft_total;
             maxDate = d.activity_date;
@@ -67,6 +74,9 @@ function renderKPIs(data) {
     document.getElementById('kpi-total-aircraft').innerText = totalAir.toLocaleString();
     document.getElementById('kpi-total-crossing').innerText = totalCross.toLocaleString();
     document.getElementById('kpi-total-vessels').innerText = totalShip.toLocaleString();
+    document.getElementById('kpi-total-official').innerText = totalOfficial.toLocaleString();
+    document.getElementById('kpi-total-balloons').innerText = totalBalloons.toLocaleString();
+    
     document.getElementById('kpi-max-day').innerText = maxVal;
     document.getElementById('kpi-max-date').innerText = maxDate ? moment(maxDate).format('YYYY/MM/DD') : '--/--';
 }
@@ -190,6 +200,85 @@ function renderTrendChart(data) {
                         text: '海軍艘次',
                         color: '#06b6d4'
                     }
+                }
+            }
+        }
+    });
+}
+
+function renderOfficialShipsChart(data) {
+    const ctx = document.getElementById('officialShipsChart').getContext('2d');
+
+    if (officialChartInstance) officialChartInstance.destroy();
+
+    officialChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.map(d => moment(d.activity_date).format('MM/DD')),
+            datasets: [{
+                label: '公務船 (Official Ships)',
+                data: data.map(d => d.official_ships_total),
+                backgroundColor: 'rgba(234, 179, 8, 0.7)', // intel-yellow
+                borderRadius: 2,
+                barPercentage: 0.6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#64748b', maxTicksLimit: 8 }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: '#334155' },
+                    ticks: { color: '#eab308', stepSize: 1 }
+                }
+            }
+        }
+    });
+}
+
+function renderBalloonsChart(data) {
+    const ctx = document.getElementById('balloonsChart').getContext('2d');
+
+    if (balloonsChartInstance) balloonsChartInstance.destroy();
+
+    balloonsChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(d => moment(d.activity_date).format('MM/DD')),
+            datasets: [{
+                label: '空飄氣球 (Balloons)',
+                data: data.map(d => d.balloons_total),
+                borderColor: '#a855f7', // intel-purple
+                backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                borderWidth: 2,
+                pointRadius: 2,
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#64748b', maxTicksLimit: 8 }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: '#334155' },
+                    ticks: { color: '#a855f7', stepSize: 1 }
                 }
             }
         }
