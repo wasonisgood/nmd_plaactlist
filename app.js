@@ -254,12 +254,26 @@ function renderTable(data) {
     // Recent first, show 100
     const displayData = [...data].reverse().slice(0, 100);
 
-    displayData.forEach((item) => {
+    displayData.forEach((item, index) => {
         const tr = document.createElement('tr');
         tr.className = "bg-slate-800/30 hover:bg-slate-700/50 transition border-b border-slate-700 cursor-pointer group";
         tr.onclick = () => openModal(item);
 
         const isThreat = item.aircraft_crossing > 0;
+
+        // Calculate Trend
+        let trendHtml = '';
+        const prevItem = displayData[index + 1]; // Since it's reversed, next item is previous day
+        if (prevItem) {
+            const diff = item.aircraft_total - prevItem.aircraft_total;
+            if (diff > 0) {
+                trendHtml = `<span class="text-red-400 text-xs font-mono ml-2">▲+${diff}</span>`;
+            } else if (diff < 0) {
+                trendHtml = `<span class="text-emerald-400 text-xs font-mono ml-2">▼${diff}</span>`;
+            } else {
+                trendHtml = `<span class="text-slate-500 text-xs font-mono ml-2">-</span>`;
+            }
+        }
 
         tr.innerHTML = `
             <td class="px-6 py-4 font-mono text-slate-300 group-hover:text-white transition whitespace-nowrap">${item.activity_date}</td>
@@ -267,7 +281,8 @@ function renderTable(data) {
             <td class="px-6 py-4 text-center whitespace-nowrap ${isThreat ? 'text-red-400 font-bold' : 'text-slate-600'}">${item.aircraft_crossing || '-'}</td>
             <td class="px-6 py-4 text-center text-cyan-400 font-mono whitespace-nowrap">${item.vessels_total}</td>
             <td class="px-6 py-4 whitespace-nowrap">
-                ${isThreat ? '<span class="text-red-400 font-bold">● 逾越中線</span>' : '<span class="text-slate-500">常態巡航</span>'}
+                ${isThreat ? '<span class="text-red-400 font-bold">● 逾越中線</span>' : '<span class="text-orange-400">● 持續擾臺</span>'}
+                ${trendHtml}
             </td>
             <td class="px-6 py-4 text-right whitespace-nowrap">
                 <button class="text-xs bg-slate-700 hover:bg-blue-600 text-white px-3 py-1 rounded transition">詳細</button>
