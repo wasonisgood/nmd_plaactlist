@@ -8,30 +8,60 @@ let balloonsChartInstance = null;
 
 async function init() {
     try {
-        const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/pla_activity?select=*,pla_flight_events(*)&order=activity_date.asc`, {
-            headers: {
-                "apikey": CONFIG.SUPABASE_KEY,
-                "Authorization": `Bearer ${CONFIG.SUPABASE_KEY}`
+        // 1. 優先使用本機預先打包資料（離線靜態模式，完全免疫遠端過期網域）
+        if (window.PLA_STATIC_DATA && Array.isArray(window.PLA_STATIC_DATA) && window.PLA_STATIC_DATA.length > 0) {
+            GLOBAL_DATA = window.PLA_STATIC_DATA;
+        } else {
+            try {
+                const localRes = await fetch('./pla_data.json');
+                if (localRes.ok) {
+                    GLOBAL_DATA = await localRes.json();
+                }
+            } catch (localErr) {
+                console.warn('本地 pla_data.json 載入略過，嘗試備援連線', localErr);
             }
-        });
+        }
 
-        if (!res.ok) throw new Error("API Error");
-        GLOBAL_DATA = await res.json();
+        // 2. 若無靜態資料且設定了有效遠端資料庫，嘗試拉取最新動態
+        if ((!GLOBAL_DATA || GLOBAL_DATA.length === 0) && typeof CONFIG !== 'undefined' && CONFIG.SUPABASE_URL && !CONFIG.SUPABASE_URL.includes('abjxpbtcseagrfwcehbo')) {
+            try {
+                const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/pla_activity?select=*,pla_flight_events(*)&order=activity_date.asc`, {
+                    headers: {
+                        "apikey": CONFIG.SUPABASE_KEY,
+                        "Authorization": `Bearer ${CONFIG.SUPABASE_KEY}`
+                    }
+                });
+
+                if (res.ok) {
+                    GLOBAL_DATA = await res.json();
+                }
+            } catch (dbErr) {
+                console.warn('遠端 Supabase 連線失敗，切換至靜態備援模式', dbErr);
+            }
+        }
+
+        if (!GLOBAL_DATA || GLOBAL_DATA.length === 0) {
+            throw new Error("無可用海空域動態數據");
+        }
 
         // Check Version
         if (GLOBAL_DATA.length > 0) {
             const latestDate = GLOBAL_DATA[GLOBAL_DATA.length - 1].activity_date;
-            document.getElementById('nav-ver').innerText = latestDate;
-            document.getElementById('ver-date').innerText = latestDate;
-            document.getElementById('startup-modal').classList.remove('hidden');
+            const navVer = document.getElementById('nav-ver');
+            const verDate = document.getElementById('ver-date');
+            if (navVer) navVer.innerText = latestDate;
+            if (verDate) verDate.innerText = latestDate;
+            const startupModal = document.getElementById('startup-modal');
+            if (startupModal) startupModal.classList.remove('hidden');
         }
 
         updateDashboard(0); // Default: ALL
         renderTable(GLOBAL_DATA);
 
     } catch (e) {
-        console.error(e);
-        document.getElementById('table-body').innerHTML = `<tr><td colspan="6" class="p-8 text-center text-red-500">載入失敗: ${e.message}</td></tr>`;
+        console.error('初始化儀表板錯誤:', e);
+        const tb = document.getElementById('table-body');
+        if (tb) tb.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-red-500">載入失敗: ${e.message}</td></tr>`;
     }
 }
 

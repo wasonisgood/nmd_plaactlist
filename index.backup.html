@@ -6,6 +6,15 @@
     <title>臺海動態戰略儀表板 | PLA Activity Dashboard</title>
     
     <!-- Libraries -->
+    <script>
+      (function(){
+        const _w = console.warn;
+        console.warn = function(...args) {
+          if (typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com should not be used in production')) return;
+          _w.apply(console, args);
+        };
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
@@ -217,6 +226,7 @@
 
     <!-- Load Config & App -->
     <script src="config.js"></script>
+    <script src="pla_data.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
